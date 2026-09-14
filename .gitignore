@@ -1,0 +1,9 @@
+node_modules
+dist
+*.local
+tsc_out.txt
+build_out.txt
+build2_out.txt
+patch_ai.cjs
+.DS_Store
+build_final.txt
