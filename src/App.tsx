@@ -22,8 +22,11 @@ import CustomSections from './components/editor/CustomSections';
 import ExportPanel from './components/ExportPanel';
 import ImportCVModal from './components/ImportCVModal';
 import CVPreview from './components/CVPreview';
+import Logo from './components/Logo';
+import InstallAppButton from './components/InstallAppButton';
 import { getLabels, LANGUAGES } from './i18n/labels';
 import { useDarkMode, useHistory, useShortcuts, cvProgress } from './utils/useUX';
+import { useServiceWorkerUpdate } from './utils/pwa';
 
 type TabKey = 'personal' | 'experience' | 'education' | 'skills' | 'other' | 'design' | 'quality' | 'profiles' | 'sections';
 
@@ -98,6 +101,9 @@ export default function App() {
   const { undo, redo, canUndo, canRedo } = useHistory(data);
   const progress = cvProgress(data);
 
+  /* PWA : nouvelles versions de l'application installée */
+  const { updateReady, applyUpdate } = useServiceWorkerUpdate();
+
   useShortcuts({
     undo: () => { const prev = undo(); if (prev) setData(prev); },
     redo: () => { const next = redo(); if (next) setData(next); },
@@ -108,6 +114,15 @@ export default function App() {
   useEffect(() => {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch { /* quota */ }
   }, [data]);
+
+  /* Raccourci de l'application installée : « /?action=import » ouvre l'import de CV */
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('action') === 'import') {
+      setImportOpen(true);
+      window.history.replaceState(null, '', window.location.pathname);
+    }
+  }, []);
 
   const updateInlineEdit = (path: string, value: string) => {
     setData(previous => {
@@ -205,11 +220,7 @@ export default function App() {
         <div className="flex items-center gap-2 px-3 sm:px-4 h-14">
           {/* Logo */}
           <div className="flex items-center gap-2 min-w-0">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center shadow-md shadow-indigo-200 flex-shrink-0">
-              <svg className="w-4.5 h-4.5 text-white" style={{ width: 18, height: 18 }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-            </div>
+            <Logo size={36} className="flex-shrink-0 rounded-xl drop-shadow-md" />
             <div className="hidden xs:block min-w-0">
               <h1 className="text-[15px] font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent leading-tight whitespace-nowrap">
                 CV Builder Pro
@@ -228,6 +239,7 @@ export default function App() {
               className="w-9 h-9 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-30">↷</button>
             <button onClick={toggleDark} title="Mode sombre (D)"
               className="w-9 h-9 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors text-sm">{dark ? '☀️' : '🌙'}</button>
+            <InstallAppButton />
             <button onClick={() => setImportOpen(true)}
               className="px-3 h-9 text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors flex items-center gap-1.5">
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
@@ -267,6 +279,7 @@ export default function App() {
                   <button onClick={clearCV} className="w-full text-left px-3 py-2.5 text-xs text-slate-600 hover:bg-slate-50 rounded-lg flex items-center gap-2">🧹 Vider les champs</button>
                   <button onClick={resetCV} className="w-full text-left px-3 py-2.5 text-xs text-slate-600 hover:bg-slate-50 rounded-lg flex items-center gap-2">↺ Données d'exemple</button>
                   <div className="border-t border-slate-100 my-1" />
+                  <InstallAppButton variant="menu" onDone={() => setMenuOpen(false)} />
                   <p className="px-3 py-1.5 text-[10px] text-slate-400">{templateName} · {langNative}</p>
                 </div>
               </>
@@ -379,6 +392,19 @@ export default function App() {
         onImport={(imported) => setData(imported)}
         current={data}
       />
+
+      {/* PWA : nouvelle version disponible */}
+      {updateReady && (
+        <div className="no-print fixed bottom-24 lg:bottom-8 left-1/2 -translate-x-1/2 z-[60] flex items-center gap-3 pl-4 pr-2 py-2 bg-slate-900 text-white rounded-2xl shadow-2xl animate-fadeIn max-w-[calc(100vw-2rem)]">
+          <p className="text-xs font-medium whitespace-nowrap">Nouvelle version disponible</p>
+          <button
+            onClick={applyUpdate}
+            className="px-3 h-8 text-xs font-bold bg-gradient-to-r from-indigo-500 to-purple-600 rounded-xl hover:opacity-90 transition-opacity whitespace-nowrap"
+          >
+            Mettre à jour
+          </button>
+        </div>
+      )}
     </div>
   );
 }

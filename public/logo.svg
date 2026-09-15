@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="CV Builder Pro">
+  <title>CV Builder Pro</title>
+  <defs>
+    <linearGradient id="cvBrand" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#6366f1" />
+      <stop offset="0.5" stop-color="#8b5cf6" />
+      <stop offset="1" stop-color="#ec4899" />
+    </linearGradient>
+  </defs>
+  <!-- Fond de marque -->
+  <rect width="512" height="512" rx="112" fill="url(#cvBrand)" />
+  <!-- Feuille de CV -->
+  <rect x="132" y="100" width="240" height="272" rx="30" fill="#ffffff" />
+  <rect x="172" y="169" width="108" height="30" rx="15" fill="#6366f1" />
+  <rect x="172" y="221" width="160" height="18" rx="9" fill="#cbd5e1" />
+  <rect x="172" y="255" width="120" height="18" rx="9" fill="#cbd5e1" />
+  <rect x="172" y="289" width="160" height="18" rx="9" fill="#e2e8f0" />
+  <!-- Éclat IA -->
+  <path d="M416 368 Q416 416 464 416 Q416 416 416 464 Q416 416 368 416 Q416 416 416 368 Z" fill="#ffffff" />
+</svg>
