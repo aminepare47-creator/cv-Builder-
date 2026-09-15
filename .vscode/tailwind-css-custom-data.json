@@ -1,0 +1,28 @@
+{
+  "version": 1.1,
+  "properties": [],
+  "atDirectives": [
+    {
+      "name": "@theme",
+      "description": "Directives Tailwind CSS v4 : définition des tokens du thème."
+    },
+    {
+      "name": "@utility",
+      "description": "Directives Tailwind CSS v4 : utilitaires personnalisés."
+    },
+    {
+      "name": "@custom-variant",
+      "description": "Directives Tailwind CSS v4 : variantes personnalisées."
+    },
+    {
+      "name": "@apply",
+      "description": "Directives Tailwind CSS : inclusion d'utilitaires dans du CSS."
+    },
+    {
+      "name": "@import",
+      "description": "Import CSS standard (dont « tailwindcss »)."
+    }
+  ],
+  "pseudoClasses": [],
+  "pseudoElements": []
+}
