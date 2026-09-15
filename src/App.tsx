@@ -324,6 +324,11 @@ export default function App() {
           </div>
           <div className="flex-1 overflow-y-auto overscroll-contain scrollbar-thin px-4 sm:px-5 py-4 pb-6">
             {editorBody}
+            <p className="no-print mt-6 text-center text-[10px] text-slate-400">
+              <a href="/privacy.html" className="hover:text-slate-600 underline">Confidentialité</a>
+              {' · '}
+              <a href="/terms.html" className="hover:text-slate-600 underline">Conditions d'utilisation</a>
+            </p>
           </div>
         </aside>
 
