@@ -22,9 +22,11 @@ export interface AISettings {
 const STORAGE_KEY = 'cvbuilder.ai.settings';
 
 export const GROQ_MODELS = [
-  { id: 'llama-3.3-70b-versatile', label: 'Llama 3.3 70B (recommandé)' },
-  { id: 'llama-3.1-8b-instant', label: 'Llama 3.1 8B (rapide)' },
-  { id: 'gemma2-9b-it', label: 'Gemma 2 9B' },
+  { id: 'openai/gpt-oss-120b', label: 'GPT-OSS 120B (recommandé)' },
+  { id: 'openai/gpt-oss-20b', label: 'GPT-OSS 20B (rapide)' },
+  { id: 'qwen/qwen3.8-27b', label: 'Qwen 3.8 27B' },
+  { id: 'groq/compound', label: 'Groq Compound' },
+  { id: 'allam-2-7b', label: 'ALLaM 2 7B' },
 ];
 
 export const GEMINI_MODELS = [
@@ -37,7 +39,7 @@ export const DEFAULT_AI_SETTINGS: AISettings = {
   provider: 'groq',
   groqKey: '',
   geminiKey: '',
-  model: 'llama-3.3-70b-versatile',
+  model: 'openai/gpt-oss-120b',
 };
 
 export function loadAISettings(): AISettings {
