@@ -8,3 +8,8 @@ patch_ai.cjs
 .DS_Store
 build_final.txt
 push_out.txt
+
+tsc_out.txt
+build_out.txt
+.env
+.env.local

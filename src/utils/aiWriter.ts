@@ -360,9 +360,77 @@ async function callGemini(ctx: AIPromptContext, settings: AISettings): Promise<s
   return extractVariants(text);
 }
 
-/** Génère via l’IA choisie (Groq ou Gemini). Retourne une ou plusieurs variantes. */
+/* ------------------------------------------------------------------ */
+/* Disponibilité de l'IA serveur (proxy sans clé utilisateur)          */
+/* ------------------------------------------------------------------ */
+
+export interface ServerAICaps { available: boolean; groq: boolean; gemini: boolean; }
+
+let serverCaps: ServerAICaps | null = null;
+
+/** Interroge /api/ai (une seule fois) pour savoir si le serveur a une clé IA. */
+export async function detectServerAI(force = false): Promise<ServerAICaps> {
+  if (serverCaps && !force) return serverCaps;
+  try {
+    const res = await fetch('/api/ai', { method: 'GET' });
+    if (res.ok) {
+      const j = await res.json();
+      serverCaps = { available: !!(j?.groq || j?.gemini), groq: !!j?.groq, gemini: !!j?.gemini };
+    } else {
+      serverCaps = { available: false, groq: false, gemini: false };
+    }
+  } catch {
+    serverCaps = { available: false, groq: false, gemini: false };
+  }
+  return serverCaps;
+}
+
+export const serverAIReady = () => !!serverCaps?.available;
+
+/** Choisit le fournisseur réellement disponible et un modèle compatible. */
+function resolveProvider(caps: ServerAICaps, settings: AISettings) {
+  let provider: AIProvider = settings.provider;
+  let model = settings.model;
+  if (provider === 'groq' && !caps.groq && caps.gemini) provider = 'gemini';
+  else if (provider === 'gemini' && !caps.gemini && caps.groq) provider = 'groq';
+  const groqModel = GROQ_MODELS.some(m => m.id === model);
+  if (provider === 'groq' && !groqModel) model = GROQ_MODELS[0].id;
+  if (provider === 'gemini' && groqModel) model = GEMINI_MODELS[0].id;
+  return { provider, model };
+}
+
+/**
+ * Génère via l’IA choisie (Groq ou Gemini). Retourne une ou plusieurs variantes.
+ * Stratégie :
+ *   1. Proxy serverless (/api/ai) — clé secrète côté serveur, l’utilisateur n’a RIEN à configurer.
+ *   2. Repli : clé personnelle stockée dans le navigateur (mode BYOK).
+ */
 export async function generateWithAI(ctx: AIPromptContext, settings: AISettings): Promise<string[]> {
-  if (!hasActiveKey(settings)) throw new Error('Aucune clé API configurée.');
+  // 1. Tentative via le proxy (déploiement serveur)
+  const caps = await detectServerAI();
+  if (caps.available) {
+    const { provider, model } = resolveProvider(caps, settings);
+    try {
+      const res = await fetch('/api/ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          provider,
+          model,
+          system: buildSystemPrompt(ctx),
+          user: buildUserPrompt(ctx),
+        }),
+      });
+      if (res.ok) {
+        const json = await res.json();
+        const text: string = json?.text ?? '';
+        if (text.trim()) return extractVariants(text);
+      }
+    } catch { /* le proxy a échoué → repli BYOK */ }
+  }
+
+  // 2. Repli : clé personnelle
+  if (!hasActiveKey(settings)) throw new Error('IA indisponible pour le moment : réessayez plus tard.');
   return settings.provider === 'groq' ? callGroq(ctx, settings) : callGemini(ctx, settings);
 }
 

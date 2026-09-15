@@ -44,9 +44,23 @@ npm run build    # build de production
 
 ## 🔑 Activer l'IA (gratuit)
 
-1. Ouvrez l'assistant de rédaction (✨) puis l'icône ⚙️.
-2. Choisissez **Groq** (clé gratuite sur [console.groq.com](https://console.groq.com)) ou **Gemini** (gratuit sur [aistudio.google.com](https://aistudio.google.com)).
-3. Collez votre clé API — elle ne quitte jamais votre navigateur.
+**Deux modes possibles, aucun code à changer :**
+
+### Mode 1 — IA serveur (recommandé pour un site public)
+L'utilisateur ne saisit **rien** : la clé reste secrète côté serveur.
+
+1. Déployez le projet sur [Vercel](https://vercel.com) (import du dépôt GitHub).
+2. Dans **Settings → Environment Variables**, ajoutez au moins une variable :
+   - `GROQ_API_KEY` = votre clé Groq (gratuite sur [console.groq.com](https://console.groq.com))
+   - `GEMINI_API_KEY` = votre clé Google AI Studio (facultative, [aistudio.google.com](https://aistudio.google.com))
+3. Redéployez. Le site appelle `/api/ai` : l'IA est active d'emblée, les visiteurs ne voient aucune clé.
+
+> L'API serverless est dans `api/ai.js` (aucune dépendance à installer). En local : `npx vercel dev`.
+
+### Mode 2 — Clé personnelle (BYOK)
+Chaque utilisateur peut ouvrir l'assistant ✨ → ⚙️ et coller sa propre clé : elle reste stockée dans son navigateur (localStorage). Sans clé ni serveur, un générateur local prend le relais (hors ligne).
+
+📄 Le fichier `.env.example` liste les variables attendues.
 
 ## 🛠 Stack
 

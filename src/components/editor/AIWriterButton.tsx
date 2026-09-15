@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { CVLanguage } from '../../i18n/labels';
 import {
   generateProfessionalText,
@@ -6,6 +6,7 @@ import {
   loadAISettings,
   saveAISettings,
   hasActiveKey,
+  detectServerAI,
   buildProfileContextFromStorage,
   TONE_LABELS,
   GROQ_MODELS,
@@ -74,8 +75,12 @@ export default function AIWriterButton({ kind, language, value, onApply, context
   const [error, setError] = useState<string | null>(null);
   const [settings, setSettings] = useState<AISettings>(() => loadAISettings());
   const [showSettings, setShowSettings] = useState(false);
+  const [serverAI, setServerAI] = useState(false);
   const labels = KIND_LABELS[kind];
-  const aiReady = hasActiveKey(settings);
+  const aiReady = serverAI || hasActiveKey(settings);
+
+  // Détection du proxy IA côté serveur (clé secrète, rien à configurer pour l'utilisateur).
+  useEffect(() => { detectServerAI().then(c => setServerAI(c.available)).catch(() => setServerAI(false)); }, []);
 
   const openAssistant = () => {
     setPrompt('');
@@ -140,9 +145,11 @@ export default function AIWriterButton({ kind, language, value, onApply, context
               <div className="flex-1">
                 <h3 className="text-sm font-bold text-slate-900">{labels.title}</h3>
                 <p className="text-[10px] text-slate-500">
-                  {aiReady
-                    ? `IA connectée · ${settings.provider === 'groq' ? 'Groq' : 'Gemini'} · vos clés restent dans votre navigateur`
-                    : 'Assistant local · connectez Groq ou Gemini pour une IA réelle'}
+                  {serverAI
+                    ? 'IA connectée · rien à configurer'
+                    : aiReady
+                      ? `IA connectée · ${settings.provider === 'groq' ? 'Groq' : 'Gemini'} · clé stockée dans votre navigateur`
+                      : 'Assistant local · l’IA serveur n’est pas disponible sur cet hébergement'}
                 </p>
               </div>
               <button type="button" onClick={() => setShowSettings(v => !v)}
@@ -191,7 +198,16 @@ export default function AIWriterButton({ kind, language, value, onApply, context
                       ))}
                     </select>
                   </div>
-                  <p className="text-[10px] text-slate-500">La clé est stockée uniquement dans ce navigateur (localStorage). Sans clé, l’assistant local est utilisé.</p>
+                  {serverAI ? (
+                    <p className="text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg p-2">
+                      ✓ IA déjà active sur ce service : vous n’avez rien à saisir. Ces champs servent uniquement à utiliser votre propre clé si vous le souhaitez.
+                    </p>
+                  ) : (
+                    <p className="text-[10px] text-slate-500">
+                      Optionnel : collez une clé gratuite (Groq ou Gemini) pour activer une IA personnelle. Sans clé, aucune donnée ne quitte votre navigateur.
+                    </p>
+                  )}
+                  <p className="text-[10px] text-slate-500">La clé reste stockée uniquement dans ce navigateur (localStorage).</p>
                 </div>
               )}
 

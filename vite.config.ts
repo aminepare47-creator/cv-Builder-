@@ -16,4 +16,14 @@ export default defineConfig({
       "@": path.resolve(__dirname, "src"),
     },
   },
+  server: {
+    // En local, `vercel dev` sert /api/ai. Ce proxy permet aussi de tester la clé
+    // locale via la variable d'environnement VITE_GROQ_API_KEY (facultatif).
+    proxy: {
+      "/api/ai": {
+        target: process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000",
+        changeOrigin: true,
+      },
+    },
+  },
 });
