@@ -1,6 +1,6 @@
 {
   "id": "/",
-  "name": "CV Builder Pro — Créateur de CV",
+  "name": "CV Builder Pro — Générateur de CV",
   "short_name": "CV Builder",
   "description": "Créez, personnalisez et exportez votre CV professionnel : 10 modèles, 8 langues, studio photo, assistance IA et import de CV existant. Fonctionne aussi hors ligne.",
   "lang": "fr",
@@ -10,8 +10,8 @@
   "display": "standalone",
   "display_override": ["standalone", "minimal-ui", "browser"],
   "orientation": "any",
-  "theme_color": "#6366f1",
-  "background_color": "#ffffff",
+  "theme_color": "#312e81",
+  "background_color": "#1e1b4b",
   "categories": ["business", "productivity", "utilities"],
   "icons": [
     {
