@@ -1,13 +1,8 @@
 {
-  // CSS Tailwind v4 : VS Code ne connait pas nativement @theme / @utility /
-  // @custom-variant / @apply → on coupe ce faux positif (le build Vite/Tailwind
-  // reste la source de vérité). Les vraies erreurs CSS restent affichées.
   "css.lint.unknownAtRules": "ignore",
   "scss.lint.unknownAtRules": "ignore",
   "less.lint.unknownAtRules": "ignore",
   "css.customData": [".vscode/tailwind-css-custom-data.json"],
-  // Les fichiers JS racine (api Vercel, service worker) ont leurs propres
-  // environnements (Node / ServiceWorker) : pas de validation JS implicite.
   "javascript.validate.enable": false,
   "js/ts.implicitProjectConfig.checkJs": false
 }
