@@ -1,15 +1,15 @@
 /**
  * Proxy IA serverless (Vercel) avec BASCULEMENT AUTOMATIQUE.
  *
- * La clÃ© API reste SECRÃˆTE cÃ´tÃ© serveur (variables d'environnement).
- * Les utilisateurs de l'application n'ont RIEN Ã  configurer.
+ * La clé API reste SECRÈTE côté serveur (variables d'environnement).
+ * Les utilisateurs de l'application n'ont RIEN à configurer.
  *
  * Variables d'environnement : GROQ_API_KEY et/ou GEMINI_API_KEY
  *
  * POST /api/ai { provider, model, system, user, temperature? }
- *   â†’ essaie le modÃ¨le demandÃ©, puis les autres modÃ¨les gratuits disponibles
- *     (Groq puis Gemini) dÃ¨s qu'un modÃ¨le atteint sa limite ou est saturÃ©.
- *   â†’ { text, provider, model, fallback }
+ *   → essaie le modèle demandé, puis les autres modèles gratuits disponibles
+ *     (Groq puis Gemini) dès qu'un modèle atteint sa limite ou est saturé.
+ *   → { text, provider, model, fallback }
  */
 const GROQ_CHAIN = [
   'openai/gpt-oss-120b',
@@ -20,11 +20,13 @@ const GROQ_CHAIN = [
 ];
 const GEMINI_CHAIN = ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro'];
 
+/** Modèles en quarantaine après une limite atteinte (par instance chaude). */
 const cooldown = new Map();
 const COOLDOWN_MS = 60000;
 const inCooldown = (id) => (cooldown.get(id) ?? 0) > Date.now();
 const setCooldown = (id) => cooldown.set(id, Date.now() + COOLDOWN_MS);
 
+/** Erreurs justifiant d'essayer le modèle suivant. */
 function shouldTryNext(status, detail) {
   if ([404, 429, 500, 502, 503, 504].includes(status)) return true;
   const d = (detail || '').toLowerCase();
@@ -71,7 +73,8 @@ async function callGemini(key, model, system, user, temperature) {
     detail: j?.error?.message ?? JSON.stringify(j).slice(0, 200),
   };
 }
-/** Ordre des tentatives : modÃ¨le demandÃ©, puis les autres modÃ¨les gratuits. */
+
+/** Ordre des tentatives : modèle demandé, puis les autres modèles gratuits. */
 function buildAttempts(provider, model) {
   const attempts = [];
   const push = (p, m) => {
@@ -118,7 +121,7 @@ export default async function handler(req, res) {
     const { model, system, user, temperature = 0.7 } = req.body ?? {};
     if (!system || !user) return res.status(400).json({ error: 'system et user requis' });
     if (!process.env.GROQ_API_KEY && !process.env.GEMINI_API_KEY) {
-      return res.status(503).json({ error: 'Aucune clÃ© IA configurÃ©e sur le serveur' });
+      return res.status(503).json({ error: 'Aucune clé IA configurée sur le serveur' });
     }
 
     const provider = req.body?.provider ?? 'groq';
@@ -126,7 +129,7 @@ export default async function handler(req, res) {
     const errors = [];
     let authError = false;
 
-    // Passe 1 : on Ã©vite les modÃ¨les en limite rÃ©cente. Passe 2 : on les retente.
+    // Passe 1 : on évite les modèles en limite récente. Passe 2 : on les retente.
     outer:
     for (const pass of [0, 1]) {
       for (const a of attempts) {
@@ -162,7 +165,7 @@ export default async function handler(req, res) {
     }
 
     return res.status(429).json({
-      error: 'Tous les modÃ¨les gratuits sont momentanÃ©ment indisponibles (limites atteintes). RÃ©essayez dans une minute.',
+      error: 'Tous les modèles gratuits sont momentanément indisponibles (limites atteintes). Réessayez dans une minute.',
       attempts: errors.slice(0, 8),
     });
   } catch (e) {
