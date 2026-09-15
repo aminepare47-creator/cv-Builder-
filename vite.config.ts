@@ -16,6 +16,11 @@ export default defineConfig({
       "@": path.resolve(__dirname, "src"),
     },
   },
+  build: {
+    // Garantit que Vercel trouve toujours un dossier `dist/` valide avec index.html.
+    outDir: "dist",
+    emptyOutDir: true,
+  },
   server: {
     // En local, `vercel dev` sert /api/ai. Ce proxy permet aussi de tester la clé
     // locale via la variable d'environnement VITE_GROQ_API_KEY (facultatif).
