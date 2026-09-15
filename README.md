@@ -74,7 +74,7 @@ Plus besoin de choisir le « bon » modèle : le service essaie les modèles gra
 
 ## 🛠 Stack
 
-React 18 · TypeScript · Vite · Tailwind CSS · jsPDF · html2canvas · pdfjs-dist
+React 18 · TypeScript · Vite · Tailwind CSS · jsPDF · html-to-image · pdfjs-dist
 
 ## 📁 Structure
 

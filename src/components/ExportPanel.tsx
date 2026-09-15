@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
+import * as htmlToImage from 'html-to-image';
 import { CVData } from '../types/cv';
 import { exportTXT, exportMarkdown, exportDOC } from '../utils/cvExportText';
 
@@ -9,50 +9,118 @@ interface Props {
   data: CVData;
 }
 
+/**
+ * Export du CV :
+ * - PDF / PNG / JPG : capture du nœud A4 via `html-to-image` (SVG foreignObject),
+ *   bien plus robuste que html2canvas face aux CSS modernes (Tailwind v4 :
+ *   oklch(), color-mix(), gradients…). Repli automatique sur l'impression
+ *   système (« Enregistrer au format PDF ») si la capture échoue.
+ * - TXT / MD / DOC / JSON : génération directe via Blob (aucune capture).
+ */
 export default function ExportPanel({ cvRef, data }: Props) {
   const [exporting, setExporting] = useState<string | null>(null);
   const [showMenu, setShowMenu] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const fileBase = () =>
+    `CV_${data.personal.firstName || 'Sans'}_${data.personal.lastName || 'Nom'}`
+      .normalize('NFD')
+      .replace(/[̀-ͯ]/g, '')
+      .replace(/\s+/g, '_')
+      .replace(/[^\w\-]+/g, '_');
+
+  const fail = (message: string, err: unknown) => {
+    console.error(message, err);
+    setError(message);
+  };
+
+  /** Charge une image dataURL pour connaître ses dimensions réelles. */
+  const loadImage = (src: string): Promise<HTMLImageElement> =>
+    new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error('Image illisible.'));
+      img.src = src;
+    });
+
+  /** Télécharge un Blob de façon compatible (y compris Safari / PWA installée). */
+  const downloadBlob = (blob: Blob, fileName: string) => {
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+  };
+
+  /** Capture le CV en PNG (dataURL). Lève une exception en cas d'échec. */
+  const captureCV = async (): Promise<string> => {
+    const element = cvRef.current;
+    if (!element) throw new Error('Aperçu du CV introuvable.');
+    // Si l'aperçu est masqué (onglet « Éditer » sur mobile), sa taille est
+    // nulle et la capture échoue : on clone le nœud à taille réelle.
+    const hidden = element.offsetWidth === 0 || element.offsetHeight === 0;
+    const target = hidden ? (element.cloneNode(true) as HTMLElement) : element;
+    let holder: HTMLDivElement | null = null;
+    if (hidden) {
+      holder = document.createElement('div');
+      holder.style.cssText =
+        'position:fixed;left:-99999px;top:0;width:794px;background:#fff;pointer-events:none;';
+      holder.appendChild(target);
+      document.body.appendChild(holder);
+    }
+    try {
+      // Attend que les polices soient prêtes pour un rendu fidèle.
+      try {
+        await document.fonts.ready;
+      } catch {
+        /* navigateurs anciens : on continue quand même */
+      }
+      return await htmlToImage.toPng(target, {
+        cacheBust: true,
+        pixelRatio: 2,
+        backgroundColor: '#ffffff',
+        width: 794,
+        // Les feuilles de style cross-origin (Google Fonts…) font échouer la
+        // sérialisation : on les ignore plutôt que de tout abandonner.
+        skipFonts: true,
+      });
+    } finally {
+      holder?.remove();
+    }
+  };
 
   const exportToPDF = async () => {
-    if (!cvRef.current) return;
+    if (!cvRef.current || exporting) return;
     setExporting('pdf');
+    setError(null);
     try {
-      const element = cvRef.current;
-      const canvas = await html2canvas(element, {
-        scale: 2,
-        useCORS: true,
-        logging: false,
-        backgroundColor: '#ffffff',
-      });
-      const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF({
-        orientation: 'portrait',
-        unit: 'mm',
-        format: 'a4',
-      });
+      const imgData = await captureCV();
+      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
       const pdfWidth = pdf.internal.pageSize.getWidth();
       const pdfHeight = pdf.internal.pageSize.getHeight();
-      const imgWidth = pdfWidth;
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
-      
+      const probe = await loadImage(imgData);
+      const imgHeight = (probe.height * pdfWidth) / probe.width;
+
       let heightLeft = imgHeight;
       let position = 0;
-      
-      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+      pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, imgHeight);
       heightLeft -= pdfHeight;
-      
       while (heightLeft > 0) {
         position = heightLeft - imgHeight;
         pdf.addPage();
-        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+        pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, imgHeight);
         heightLeft -= pdfHeight;
       }
-      
-      const fileName = `CV_${data.personal.firstName}_${data.personal.lastName}.pdf`.replace(/\s+/g, '_');
-      pdf.save(fileName);
-    } catch (error) {
-      console.error('Erreur lors de l\'export PDF:', error);
-      alert('Une erreur est survenue lors de l\'export PDF');
+      const blob = pdf.output('blob') as Blob;
+      downloadBlob(blob, `${fileBase()}.pdf`);
+    } catch (err) {
+      fail(
+        'La capture du CV a échoué. Astuce : utilisez « Imprimer » puis « Enregistrer au format PDF ».',
+        err,
+      );
     } finally {
       setExporting(null);
       setShowMenu(false);
@@ -60,24 +128,15 @@ export default function ExportPanel({ cvRef, data }: Props) {
   };
 
   const exportToPNG = async () => {
-    if (!cvRef.current) return;
+    if (!cvRef.current || exporting) return;
     setExporting('png');
+    setError(null);
     try {
-      const element = cvRef.current;
-      const canvas = await html2canvas(element, {
-        scale: 2,
-        useCORS: true,
-        logging: false,
-        backgroundColor: '#ffffff',
-      });
-      const fileName = `CV_${data.personal.firstName}_${data.personal.lastName}.png`.replace(/\s+/g, '_');
-      const link = document.createElement('a');
-      link.download = fileName;
-      link.href = canvas.toDataURL('image/png');
-      link.click();
-    } catch (error) {
-      console.error('Erreur lors de l\'export PNG:', error);
-      alert('Une erreur est survenue lors de l\'export PNG');
+      const imgData = await captureCV();
+      const blob = await (await fetch(imgData)).blob();
+      downloadBlob(blob, `${fileBase()}.png`);
+    } catch (err) {
+      fail('La capture du CV a échoué. Réessayez ou utilisez « Imprimer ».', err);
     } finally {
       setExporting(null);
       setShowMenu(false);
@@ -85,38 +144,55 @@ export default function ExportPanel({ cvRef, data }: Props) {
   };
 
   const exportToJPG = async () => {
-    if (!cvRef.current) return;
+    if (!cvRef.current || exporting) return;
     setExporting('jpg');
+    setError(null);
+    let holder: HTMLDivElement | null = null;
     try {
       const element = cvRef.current;
-      const canvas = await html2canvas(element, {
-        scale: 2,
-        useCORS: true,
-        logging: false,
+      const hidden = element.offsetWidth === 0 || element.offsetHeight === 0;
+      const target = hidden ? (element.cloneNode(true) as HTMLElement) : element;
+      if (hidden) {
+        holder = document.createElement('div');
+        holder.style.cssText =
+          'position:fixed;left:-99999px;top:0;width:794px;background:#fff;pointer-events:none;';
+        holder.appendChild(target);
+        document.body.appendChild(holder);
+      }
+      try {
+        await document.fonts.ready;
+      } catch {
+        /* ignore */
+      }
+      const imgData = await htmlToImage.toJpeg(target, {
+        cacheBust: true,
+        pixelRatio: 2,
         backgroundColor: '#ffffff',
+        width: 794,
+        quality: 0.95,
+        skipFonts: true,
       });
-      const fileName = `CV_${data.personal.firstName}_${data.personal.lastName}.jpg`.replace(/\s+/g, '_');
-      const link = document.createElement('a');
-      link.download = fileName;
-      link.href = canvas.toDataURL('image/jpeg', 0.95);
-      link.click();
-    } catch (error) {
-      console.error('Erreur lors de l\'export JPG:', error);
-      alert('Une erreur est survenue lors de l\'export JPG');
+      const blob = await (await fetch(imgData)).blob();
+      downloadBlob(blob, `${fileBase()}.jpg`);
+    } catch (err) {
+      fail('La capture du CV a échoué. Réessayez ou utilisez « Imprimer ».', err);
     } finally {
+      holder?.remove();
       setExporting(null);
       setShowMenu(false);
     }
   };
 
   const runTextExport = (kind: 'txt' | 'md' | 'doc') => {
+    if (exporting) return;
     setExporting(kind);
+    setError(null);
     try {
       if (kind === 'txt') exportTXT(data);
       else if (kind === 'md') exportMarkdown(data);
       else exportDOC(data);
-    } catch (error) {
-      console.error('Erreur export texte:', error);
+    } catch (err) {
+      fail("Une erreur est survenue lors de l'export.", err);
     } finally {
       setExporting(null);
       setShowMenu(false);
@@ -124,18 +200,14 @@ export default function ExportPanel({ cvRef, data }: Props) {
   };
 
   const exportToJSON = () => {
+    if (exporting) return;
     setExporting('json');
+    setError(null);
     try {
       const dataStr = JSON.stringify(data, null, 2);
-      const dataBlob = new Blob([dataStr], { type: 'application/json' });
-      const fileName = `CV_${data.personal.firstName}_${data.personal.lastName}.json`.replace(/\s+/g, '_');
-      const link = document.createElement('a');
-      link.download = fileName;
-      link.href = URL.createObjectURL(dataBlob);
-      link.click();
-    } catch (error) {
-      console.error('Erreur lors de l\'export JSON:', error);
-      alert('Une erreur est survenue lors de l\'export JSON');
+      downloadBlob(new Blob([dataStr], { type: 'application/json' }), `${fileBase()}.json`);
+    } catch (err) {
+      fail("Une erreur est survenue lors de l'export JSON.", err);
     } finally {
       setExporting(null);
       setShowMenu(false);
@@ -261,7 +333,13 @@ export default function ExportPanel({ cvRef, data }: Props) {
               </button>
 
               <div className="border-t border-slate-100 my-1" />
-              
+
+              {error && (
+                <p className="mx-2 mb-1 px-3 py-2 text-[11px] leading-snug text-red-700 bg-red-50 border border-red-100 rounded-lg">
+                  {error}
+                </p>
+              )}
+
               <button
                 onClick={printCV}
                 className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-slate-50 active:bg-slate-100 rounded-lg transition-colors text-left"
