@@ -314,50 +314,69 @@ export function generateProfessionalText(context: WritingContext): string {
 
 // ---------- Appels API réels (Groq / Gemini) ----------
 
-async function callGroq(ctx: AIPromptContext, settings: AISettings): Promise<string[]> {
-  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${settings.groqKey.trim()}` },
-    body: JSON.stringify({
-      model: settings.model,
-      temperature: 0.7,
-      messages: [
-        { role: 'system', content: buildSystemPrompt(ctx) },
-        { role: 'user', content: buildUserPrompt(ctx) },
-      ],
-    }),
-  });
-  if (!res.ok) {
-    const detail = await res.text().catch(() => '');
-    throw new Error(`Groq (${res.status}) : ${detail.slice(0, 140)}`);
-  }
-  const json = await res.json();
-  const text = json?.choices?.[0]?.message?.content ?? '';
-  if (!text.trim()) throw new Error('Réponse Groq vide.');
+const RETRY_STATUS = [404, 429, 500, 502, 503, 504];
+
+/** Extrait et normalise la sortie brute d'un modèle. */
+function normalizeAIOutput(text: string, label: string): string[] {
+  if (!text.trim()) throw new Error(`Réponse ${label} vide.`);
   return extractVariants(text);
 }
 
-async function callGemini(ctx: AIPromptContext, settings: AISettings): Promise<string[]> {
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${settings.model}:generateContent?key=${encodeURIComponent(settings.geminiKey.trim())}`,
-    {
+async function callGroq(ctx: AIPromptContext, settings: AISettings): Promise<string[]> {
+  const chain = [settings.model, ...GROQ_MODELS.map(m => m.id)].filter((m, i, arr) => m && arr.indexOf(m) === i);
+  let lastError = '';
+  for (const model of chain) {
+    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${settings.groqKey.trim()}` },
       body: JSON.stringify({
-        systemInstruction: { parts: [{ text: buildSystemPrompt(ctx) }] },
-        contents: [{ role: 'user', parts: [{ text: buildUserPrompt(ctx) }] }],
-        generationConfig: { temperature: 0.7 },
+        model,
+        temperature: 0.7,
+        messages: [
+          { role: 'system', content: buildSystemPrompt(ctx) },
+          { role: 'user', content: buildUserPrompt(ctx) },
+        ],
       }),
-    },
-  );
-  if (!res.ok) {
+    });
+    if (res.ok) {
+      const json = await res.json();
+      const text = json?.choices?.[0]?.message?.content ?? '';
+      if (text.trim()) return normalizeAIOutput(text, 'Groq');
+    }
     const detail = await res.text().catch(() => '');
-    throw new Error(`Gemini (${res.status}) : ${detail.slice(0, 140)}`);
+    lastError = `Groq (${res.status}) : ${detail.slice(0, 120)}`;
+    // Limite atteinte ou modèle indisponible → on tente le modèle suivant.
+    if (!RETRY_STATUS.includes(res.status) && !/rate|quota|overload|not exist/i.test(detail)) break;
   }
-  const json = await res.json();
-  const text = json?.candidates?.[0]?.content?.parts?.map((p: { text?: string }) => p.text ?? '').join('') ?? '';
-  if (!text.trim()) throw new Error('Réponse Gemini vide.');
-  return extractVariants(text);
+  throw new Error(lastError || 'Groq : aucun modèle disponible.');
+}
+
+async function callGemini(ctx: AIPromptContext, settings: AISettings): Promise<string[]> {
+  const chain = [settings.model, ...GEMINI_MODELS.map(m => m.id)].filter((m, i, arr) => m && arr.indexOf(m) === i);
+  let lastError = '';
+  for (const model of chain) {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(settings.geminiKey.trim())}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: buildSystemPrompt(ctx) }] },
+          contents: [{ role: 'user', parts: [{ text: buildUserPrompt(ctx) }] }],
+          generationConfig: { temperature: 0.7 },
+        }),
+      },
+    );
+    if (res.ok) {
+      const json = await res.json();
+      const text = json?.candidates?.[0]?.content?.parts?.map((p: { text?: string }) => p.text ?? '').join('') ?? '';
+      if (text.trim()) return normalizeAIOutput(text, 'Gemini');
+    }
+    const detail = await res.text().catch(() => '');
+    lastError = `Gemini (${res.status}) : ${detail.slice(0, 120)}`;
+    if (!RETRY_STATUS.includes(res.status) && !/rate|quota|overload|not found/i.test(detail)) break;
+  }
+  throw new Error(lastError || 'Gemini : aucun modèle disponible.');
 }
 
 /* ------------------------------------------------------------------ */
@@ -399,15 +418,21 @@ function resolveProvider(caps: ServerAICaps, settings: AISettings) {
   return { provider, model };
 }
 
+/** Dernier modèle réellement utilisé côté serveur (informatif). */
+let lastUsedModel: string | null = null;
+export const getLastUsedModel = () => lastUsedModel;
+
 /**
  * Génère via l’IA choisie (Groq ou Gemini). Retourne une ou plusieurs variantes.
  * Stratégie :
  *   1. Proxy serverless (/api/ai) — clé secrète côté serveur, l’utilisateur n’a RIEN à configurer.
- *   2. Repli : clé personnelle stockée dans le navigateur (mode BYOK).
+ *      Le serveur bascule automatiquement de modèle quand un modèle gratuit atteint sa limite.
+ *   2. Repli : clé personnelle stockée dans le navigateur (mode BYOK), avec la même bascule.
  */
 export async function generateWithAI(ctx: AIPromptContext, settings: AISettings): Promise<string[]> {
-  // 1. Tentative via le proxy (déploiement serveur)
+  // 1. Tentative via le proxy (déploiement serveur) — bascule de modèle automatique.
   const caps = await detectServerAI();
+  let serverError = '';
   if (caps.available) {
     const { provider, model } = resolveProvider(caps, settings);
     try {
@@ -424,13 +449,21 @@ export async function generateWithAI(ctx: AIPromptContext, settings: AISettings)
       if (res.ok) {
         const json = await res.json();
         const text: string = json?.text ?? '';
-        if (text.trim()) return extractVariants(text);
+        if (text.trim()) {
+          lastUsedModel = json?.model ?? model;
+          return extractVariants(text);
+        }
+      } else {
+        const json = await res.json().catch(() => ({}));
+        serverError = json?.error ?? '';
       }
     } catch { /* le proxy a échoué → repli BYOK */ }
   }
 
-  // 2. Repli : clé personnelle
-  if (!hasActiveKey(settings)) throw new Error('IA indisponible pour le moment : réessayez plus tard.');
+  // 2. Repli : clé personnelle (avec bascule de modèle intégrée)
+  if (!hasActiveKey(settings)) {
+    throw new Error(serverError || 'IA indisponible pour le moment : réessayez dans une minute.');
+  }
   return settings.provider === 'groq' ? callGroq(ctx, settings) : callGemini(ctx, settings);
 }
 

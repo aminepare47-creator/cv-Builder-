@@ -7,6 +7,7 @@ import {
   saveAISettings,
   hasActiveKey,
   detectServerAI,
+  getLastUsedModel,
   buildProfileContextFromStorage,
   TONE_LABELS,
   GROQ_MODELS,
@@ -76,6 +77,7 @@ export default function AIWriterButton({ kind, language, value, onApply, context
   const [settings, setSettings] = useState<AISettings>(() => loadAISettings());
   const [showSettings, setShowSettings] = useState(false);
   const [serverAI, setServerAI] = useState(false);
+  const [usedModel, setUsedModel] = useState<string | null>(null);
   const labels = KIND_LABELS[kind];
   const aiReady = serverAI || hasActiveKey(settings);
 
@@ -109,6 +111,7 @@ export default function AIWriterButton({ kind, language, value, onApply, context
         const results = await generateWithAI(ctx, settings);
         setVariants(results);
         setSelected(0);
+        setUsedModel(serverAI ? getLastUsedModel() : null);
       } else {
         setVariants([generateProfessionalText(ctx)]);
         setSelected(0);
@@ -277,6 +280,11 @@ export default function AIWriterButton({ kind, language, value, onApply, context
                     <label className="text-xs font-bold text-slate-700">
                       {variants.length > 1 ? `${variants.length} versions proposées` : 'Proposition de l’assistant'}
                     </label>
+                    {usedModel && (
+                      <span className="text-[9px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-full px-2 py-0.5">
+                        ⚡ {usedModel}
+                      </span>
+                    )}
                     {variants.length > 1 && (
                       <div className="flex gap-1">
                         {variants.map((_, i) => (

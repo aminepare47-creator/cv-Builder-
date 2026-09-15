@@ -62,6 +62,16 @@ Chaque utilisateur peut ouvrir l'assistant ✨ → ⚙️ et coller sa propre cl
 
 📄 Le fichier `.env.example` liste les variables attendues.
 
+### 🔁 Basculement automatique de modèle
+
+Plus besoin de choisir le « bon » modèle : le service essaie les modèles gratuits **en cascade** et change tout seul dès qu'un modèle atteint sa limite (HTTP 429), est saturé (503) ou n'est pas accessible au compte.
+
+- Chaîne Groq : `openai/gpt-oss-120b` → `openai/gpt-oss-20b` → `qwen/qwen3.8-27b` → `groq/compound` → `allam-2-7b`
+- Puis chaîne Gemini (si `GEMINI_API_KEY` est définie) : `gemini-2.0-flash` → `gemini-1.5-flash` → `gemini-1.5-pro`
+- Un modèle qui vient d'échouer est mis en **quarantaine 60 s** et évité lors des appels suivants (il est retenté ensuite).
+- Le même mécanisme existe côté navigateur pour les utilisateurs qui utilisent leur propre clé.
+- L'interface affiche le modèle réellement utilisé (badge ⚡ sous les versions générées).
+
 ## 🛠 Stack
 
 React 18 · TypeScript · Vite · Tailwind CSS · jsPDF · html2canvas · pdfjs-dist

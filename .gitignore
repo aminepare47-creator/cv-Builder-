@@ -13,3 +13,6 @@ tsc_out.txt
 build_out.txt
 .env
 .env.local
+
+test_api.mjs
+write_api*.ps1
